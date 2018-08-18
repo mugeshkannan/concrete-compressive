@@ -1,0 +1,192 @@
+import numpy as np
+
+MAX_ITERATIONS = 10000
+
+
+def gradient_descent(x, y, a, epsilon):
+    theta = np.zeros((x.shape[1], 1))
+    m = x.shape[0]
+    prev_cost = np.sum((x.dot(theta)-y) ** 2) / (2 * m)
+    print("Start cost: %f" % prev_cost)
+    for i in range(0, MAX_ITERATIONS):
+        gradient = x.T.dot(x.dot(theta)-y) / m
+        theta = theta - a * gradient
+
+        # Cost calculation can take some time!
+        cost = np.sum((x.dot(theta)-y) ** 2) / (2 * m)
+        print("Iter %d | Cost: %f" % (i, cost))
+        if abs(prev_cost - cost) <= epsilon:
+            return theta
+        prev_cost = cost
+    return theta
+
+
+def normalize_features(x, x_mean=None, x_range=None):
+    if x_mean is None:
+        x_mean = x.mean(0)
+    if x_range is None:
+        x_range = x.max(0)-x.min(0)
+
+    x_norm = (x-x_mean) / x_range
+    return x_norm, x_mean, x_range
+import numpy as np
+
+
+def normal_equation(x, y):
+    # return theta
+    return np.linalg.inv(x.T.dot(x)).dot(x.T).dot(y)
+import numpy as np
+
+__training_proportions = 2/3;
+
+def add_ones_column(x):
+    return np.hstack((np.ones((x.shape[0], 1)), x))
+
+
+def check_result(y, y_prediction):
+    m = y.shape[0]
+    error = y - y_prediction
+    error_squared = error ** 2
+    exp = np.sum(error) / m
+    exp_squared = exp ** 2
+    var = np.sum(error_squared - exp_squared) / m
+    return exp, var
+
+
+def load_concrete_data():
+    raw_data = np.loadtxt(open("Concrete_Data.csv", "rb"), delimiter=",", skiprows=1)
+    x = raw_data[:, :-1]
+    #x = add_ones_column(x)
+    y = raw_data[:, -1:]
+    return x, y
+
+
+def get_training_set(x_all, y_all):
+    # 2/3 of all data is training set.
+    m_training = int(x_all.shape[0] * __training_proportions)
+    x = x_all[:m_training]
+    y = y_all[:m_training]
+    return x, y
+
+
+def get_test_set(x_all, y_all):
+    # 1/3 of all data is test set.
+    m_training = int(x_all.shape[0] * __training_proportions)
+    x = x_all[m_training:]
+    y = y_all[m_training:]
+    return x, y
+import matplotlib.pyplot as plt
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+
+import common as cm
+import gradient_descent as gd
+import normal_equation as ne
+
+
+if __name__ == "__main__":
+    # CONCRETE DATA
+    print("Concrete data set test:")
+    X, Y = cm.load_concrete_data()
+
+    # training set
+    X_training, Y_training = cm.get_training_set(X, Y)
+    X_training = cm.add_ones_column(X_training)
+
+    # test set
+    X_test, Y_test = cm.get_test_set(X, Y)
+    X_test = cm.add_ones_column(X_test)
+
+    # find thetas
+    ne_theta = ne.normal_equation(X_training, Y_training)
+    X_norm = np.ones(X_training.shape)
+    X_norm[:, 1:], x_mean, x_range = gd.normalize_features(X_training[:, 1:])
+    gd_theta = gd.gradient_descent(X_norm, Y_training, 1, 0.00001)
+
+    print("[Normal equation] theta = ", ne_theta)
+    print("[Gradient descent] theta = ", gd_theta)
+
+    # check results
+    ne_prediction = X_test.dot(ne_theta)
+    X_test_norm = np.ones(X_test.shape)
+    X_test_norm[:, 1:], _, _ = gd.normalize_features(X_test[:, 1:], x_mean, x_range)
+    gd_prediction = X_test_norm.dot(gd_theta)
+
+    exp, var = cm.check_result(Y_test, ne_prediction)
+    print("[Normal equation] Expected value (error): ", exp)
+    print("[Normal equation] Variance: ", var)
+
+    exp, var = cm.check_result(Y_test, gd_prediction)
+    print("[Gradient descent] Expected value (error): ", exp)
+    print("[Gradient descent] Variance: ", var)
+
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # try visual result check (no so impressive)
+    ax.scatter(X_test[:, 1],
+               X_test[:, 6],
+               Y_test,
+               marker='^',
+               color='green',
+               s=10,
+               alpha=0.85,
+               label='Real data')
+
+    ax.scatter(X_test[:, 1],
+               X_test[:, 6],
+               ne_prediction,
+               marker='x',
+               color='red',
+               s=10,
+               alpha=0.85,
+               label='NE prediction')
+
+    ax.scatter(X_test[:, 1],
+               X_test[:, 6],
+               gd_prediction,
+               marker='x',
+               color='blue',
+               s=10,
+               alpha=0.85,
+               label='GD prediction')
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels)
+
+    ax.set_xlabel('Cement (component 1)')
+    ax.set_ylabel('Coarse Aggregate (component 6)')
+    ax.set_zlabel('Concrete compressive strength')
+    plt.title('Concrete data set (2d projection)')
+    plt.show()
+
+    # SYNTHETIC DATA
+    print("Synthetic data test: f(x) = -0.5x + 3.5")
+    theta_syn = np.array([3.5, -0.5]).reshape((-1, 1))
+    X = np.linspace(0, 8, 200).reshape((-1, 1))
+    X = cm.add_ones_column(X)
+    Y_real = X.dot(theta_syn)
+    Y = Y_real + np.random.uniform(-2, 2, X.shape[0]).reshape((-1, 1))
+
+    ne_theta = ne.normal_equation(X, Y)
+    X_norm = np.ones(X.shape)
+    X_norm[:, 1:], x_mean, x_range = gd.normalize_features(X[:, 1:])
+    gd_theta = gd.gradient_descent(X_norm, Y, 1, 0.00001)
+
+    ne_prediction = X.dot(ne_theta)
+    gd_prediction = X_norm.dot(gd_theta)
+
+    exp, var = cm.check_result(Y, ne_prediction)
+    print("[Normal equation] Expected value (error): ", exp)
+    print("[Normal equation] Variance: ", var)
+
+    exp, var = cm.check_result(Y, gd_prediction)
+    print("[Gradient descent] Expected value (error): ", exp)
+    print("[Gradient descent] Variance: ", var)
+
+    plt.plot(X[:, 1], Y, 'go', alpha=0.7)
+    real_line, = plt.plot(X[:, 1], Y_real, 'g', linewidth=2.0)
+    ne_line, = plt.plot(X[:, 1], ne_prediction, 'r', linewidth=3.0)
+    gd_line, = plt.plot(X[:, 1], gd_prediction, 'b', linewidth=1.0)
+    plt.legend([real_line, ne_line, gd_line], ['Real', 'Normal equation', 'Gradient descent'])
+    plt.show()
